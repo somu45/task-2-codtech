@@ -1,0 +1,72 @@
+// ram_sync.v
+// Synchronous RAM Module with Read and Write Operations
+// Designed for synthesizability with EDA tools.
+
+`timescale 1ns / 1ps // Added timescale for consistency and to remove warning
+
+module ram_sync #(
+    parameter DATA_WIDTH = 8,  // Data bus width
+    parameter ADDR_WIDTH = 4   // Address bus width (e.g., 4 bits for 16 locations)
+) (
+    input  wire                  clk,         // Clock input (essential for synchronous logic)
+    input  wire                  rst_n,       // Asynchronous active-low reset
+    input  wire                  we,          // Write Enable (active high) - controls write operation
+    input  wire [ADDR_WIDTH-1:0] addr,        // Address input for both read and write
+    input  wire [DATA_WIDTH-1:0] data_in,     // Data input for write operation
+    output reg  [DATA_WIDTH-1:0] data_out     // Data output for read operation (registered for synchronous read)
+);
+
+    // Declare the memory array
+    // This 'reg' array is the standard way to infer Block RAM or Distributed RAM
+    // depending on the target technology and memory size.
+    reg [DATA_WIDTH-1:0] mem [0:(1<<ADDR_WIDTH)-1];
+
+    // Synchronous Write Operation
+    // This 'always' block describes the write behavior.
+    // The sensitivity list includes 'posedge clk' for synchronous operation
+    // and 'negedge rst_n' for asynchronous reset.
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            // Asynchronous Reset:
+            // For synthesis, this loop will typically translate to logic that clears
+            // the memory contents on reset. For large memories, EDA tools might
+            // optimize this or expect initial values to be loaded via a separate
+            // memory initialization file (e.g., .mem, .hex) during bitstream generation.
+            for (int i = 0; i < (1<<ADDR_WIDTH); i = i + 1) begin
+                mem[i] <= {DATA_WIDTH{1'b0}}; // Initialize all memory locations to 0
+            end
+        end else if (we) begin
+            // Synchronous Write:
+            // When 'we' is high, 'data_in' is written to 'mem[addr]' on the
+            // positive edge of the clock. This infers a write port.
+            mem[addr] <= data_in;
+        end
+    end
+
+    // Synchronous Read Operation
+    // This 'always' block describes the read behavior.
+    // The output 'data_out' is registered, meaning its value changes only on the
+    // positive edge of the clock. This is crucial for synchronous RAMs to ensure
+    // stable output and meet timing requirements in hardware.
+    // The output 'data_out' will reflect the data at 'addr' from the *previous*
+    // clock cycle (after the write has propagated internally).
+    always @(posedge clk or negedge rst_n) begin // Corrected 'cllk' to 'clk' here
+        if (!rst_n) begin
+            data_out <= {DATA_WIDTH{1'b0}}; // Reset data_out to 0
+        end else begin
+            data_out <= mem[addr]; // Read data from memory at the current address
+        end
+    end
+
+    // The 'initial' block and '$display' statements are for simulation only.
+    // EDA synthesis tools will ignore these constructs.
+    initial begin
+        $display("---------------------------------------");
+        $display("Synchronous RAM Module Initialized");
+        $display("Data Width: %0d bits", DATA_WIDTH);
+        $display("Address Width: %0d bits", ADDR_WIDTH);
+        $display("Memory Depth: %0d locations", (1<<ADDR_WIDTH));
+        $display("---------------------------------------");
+    end
+
+endmodule
